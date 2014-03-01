@@ -1,24 +1,21 @@
 #include "anpages.h"
 
 typedef struct {
-  uint64_t count;
-  uint64_t pages[0x1fe];
+  uint64_t count; // the number of pages in this table
+  uint64_t pages[0x1fe]; // page indexes
   uint64_t next; // address, not page; first bit = present
 } __attribute__((packed)) anpagelist_t;
 
-uint8_t anpages_initialize(anpages_t pages,
-                           uint64_t start,
-                           uint64_t used,
-                           uint64_t total) {
-  if (pages->used >= pages->total) return 0;
+uint8_t anpages_initialize(anpages_t pages, uint64_t start, uint64_t total) {
+  if (total == 0) return 0;
   
-  pages->list = used + start;
+  pages->list = start;
   pages->start = start;
-  pages->used = used + 1;
+  pages->used = 1;
   pages->total = total;
   
   // create a new, empty list structure
-  anpagelist_t * list = (anpagelist_t *)(pages->list << 12L);
+  anpagelist_t * list = (anpagelist_t *)(pages->list << 0xc);
   list->count = 0;
   list->next = 0;
   
@@ -26,7 +23,7 @@ uint8_t anpages_initialize(anpages_t pages,
 }
 
 uint64_t anpages_alloc(anpages_t pages) {
-  anpagelist_t * list = (anpagelist_t *)(pages->list << 12L);
+  anpagelist_t * list = (anpagelist_t *)(pages->list << 0xc);
   if (list->count > 0) {
     // grab the last physical page from the list
     return list->pages[--(list->count)];
@@ -48,13 +45,13 @@ uint64_t anpages_alloc(anpages_t pages) {
 }
 
 void anpages_free(anpages_t pages, uint64_t page) {
-  anpagelist_t * list = (anpagelist_t *)(pages->list << 12L);
+  anpagelist_t * list = (anpagelist_t *)(pages->list << 0xc);
   if (list->count == 0x1fe) {
     // since the root list is full, we'll use our new free page to create
     // a new empty root list.
-    list = (anpagelist_t *)(page << 12L);
+    list = (anpagelist_t *)(page << 0xc);
     list->count = 0;
-    list->next = (pages->list << 12L) & 1L;
+    list->next = (pages->list << 0xc) | 1L;
     pages->list = page;
   } else {
     list->pages[list->count++] = page;
